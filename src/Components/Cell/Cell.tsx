@@ -6,12 +6,14 @@ import { IconForNumber } from "../Icons/Numbers/IconForNumber";
 
 export interface CellProps {
     minesNearby: number;
-    number: number;
+    row: number;
+    column: number;
     hasMine: boolean;
     canPutFlags: boolean;
     isOpen: boolean;
-    cellFlagged: (isFlagged: boolean) => void;
-    cellOpened: (hasMine: boolean, number: number) => void;
+    isFlagged: boolean;
+    cellFlagged: (isFlagged: boolean, row: number, column: number) => void;
+    cellOpened: (hasMine: boolean, row: number, column: number) => void;
 }
 
 export interface CellState {
@@ -45,15 +47,15 @@ export class Cell extends React.Component<CellProps, CellState>{
         return (
             <div style={cellStyles} className={cellClasses} onContextMenu={(event) => this.cellRightClickHandler(event)} onClick={() => this.cellLeftClickHandler()}>
                 {this.state.isFlagged && !this.state.isOpen && <FlagIcon></FlagIcon>}
-                {this.state.isOpen && <IconForNumber>{this.props.minesNearby}</IconForNumber>}
-                {this.props.hasMine && <MineIcon></MineIcon>}
+                {this.state.isOpen && !this.props.hasMine && <IconForNumber>{this.props.minesNearby}</IconForNumber>}
+                {this.state.isOpen && this.props.hasMine && <MineIcon></MineIcon>}
             </div>
         );
     }
 
-    public static getDerivedStateFromProps(nextProps: CellProps, prevState: CellState): CellState {
+    public static getDerivedStateFromProps(nextProps: CellProps): CellState {
         const state: CellState = {
-            ...prevState,
+            isFlagged: nextProps.isFlagged,
             isOpen: nextProps.isOpen
         };
 
@@ -66,13 +68,13 @@ export class Cell extends React.Component<CellProps, CellState>{
         if (!this.state.isOpen && (this.props.canPutFlags || (!this.props.canPutFlags && this.state.isFlagged))) {
             const newState = !this.state.isFlagged;
             this.setState({ isFlagged: newState });
-            this.props.cellFlagged(newState);
+            this.props.cellFlagged(newState, this.props.row, this.props.column);
         }
     }
 
     private cellLeftClickHandler(): void {
         if (!this.state.isFlagged) {
-            this.props.cellOpened(this.props.hasMine, this.props.number);
+            this.props.cellOpened(this.props.hasMine, this.props.row, this.props.column);
 
             this.setState({
                 isFlagged: false,

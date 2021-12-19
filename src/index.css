@@ -13,13 +13,17 @@ code {
 }
 
 .app {
-	height: 700px;
 	display: flex;
 	justify-content: center;
 	align-items: center;
 }
 
 .field__header{
+	display: flex;
+	justify-content: space-between;
+}
+
+.field__settings__row{
 	display: flex;
 	justify-content: space-between;
 }

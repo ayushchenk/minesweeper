@@ -2,157 +2,223 @@ import React from "react";
 import { Cell, CellProps } from "../Cell/Cell";
 import FieldContext from "../../Contexts/FieldContext";
 import { FieldHeader } from "./FieldHeader";
+import { FieldSettings } from "./FieldSettings";
+import DefaultSettings from "./FieldSettings";
 
-export interface FieldProps {
+export interface FieldState {
     rows: number;
     columns: number;
     minesCount: number;
-}
-
-export interface FieldState {
     flagsCount: number;
-    cells: CellProps[];
+    cells: CellProps[][];
     minesSpawned: boolean;
 }
 
-export class Field extends React.Component<FieldProps, FieldState>{
+export class Field extends React.Component<{}, FieldState>{
     public static contextType = FieldContext;
     public context!: React.ContextType<typeof FieldContext>;
 
-    public constructor(props: FieldProps) {
+    public constructor(props: {}) {
         super(props);
 
         this.state = {
-            flagsCount: props.minesCount,
-            cells: [],
+            rows: DefaultSettings.rowsCount,
+            columns: DefaultSettings.columnsCount,
+            minesCount: DefaultSettings.minesCount,
+            flagsCount: DefaultSettings.minesCount,
+            cells: this.prepareNewCells(10, 10),
             minesSpawned: false
         };
-
-        for (let i = 0; i < this.props.columns * this.props.rows; i++) {
-            this.state.cells.push({
-                isOpen: false,
-                minesNearby: 0,
-                number: i,
-                hasMine: false,
-                canPutFlags: true,
-                cellFlagged: (isFlagged) => this.handleCellFlagged(isFlagged),
-                cellOpened: (hasMine, number) => this.handleCellOpened(hasMine, number),
-            });
-        }
     }
 
     public render(): React.ReactNode {
         const fieldStyles = {
             display: 'grid',
-            gridTemplateColumns: `repeat(${this.props.columns}, ${this.context.cellWidth}px)`,
-            gridTemplateRows: `repeat(${this.props.rows}, ${this.context.cellWidth}px)`,
+            gridTemplateColumns: `repeat(${this.state.columns}, ${this.context.cellWidth}px)`,
+            gridTemplateRows: `repeat(${this.state.rows}, ${this.context.cellWidth}px)`,
             gridGap: '2px'
         };
 
         const cells = this.getCellsFromProps();
 
+        const rowsChanged = (newRows: number) => {
+            this.restart(newRows, this.state.columns, this.state.minesCount);
+        }
+
+        const columnsChanged = (newColumns: number) => {
+            this.restart(this.state.rows, newColumns, this.state.minesCount);
+        }
+
+        const minesChanged = (newMines: number) => {
+            this.restart(this.state.rows, this.state.columns, newMines);
+        }
+
         return (
             <div>
-                <FieldHeader minesCount={this.props.minesCount} flagsCount={this.state.flagsCount}></FieldHeader>
+                <FieldHeader minesCount={this.state.minesCount} flagsCount={this.state.flagsCount}></FieldHeader>
                 <div style={fieldStyles}>
                     {cells}
                 </div>
+                <FieldSettings rowsChanged={rowsChanged} minesChanged={minesChanged} columnsChanged={columnsChanged}></FieldSettings>
             </div>
         );
     }
 
-    private handleCellFlagged(isFlagged: boolean) {
-        const newCount = this.state.flagsCount + (isFlagged ? -1 : 1);
+    private handleCellFlagged(isFlagged: boolean, row: number, column: number) {
+        const newFlagsCount = this.state.flagsCount + (isFlagged ? -1 : 1);
 
-        const canPutFlags = newCount > 0;
+        const canPutFlags = newFlagsCount > 0;
 
-        const newCellsProps = [...this.state.cells];
-        newCellsProps.forEach(prop => prop.canPutFlags = canPutFlags);
+        const newCells = [...this.state.cells];
+
+        for (let i = 0; i < this.state.rows; i++) {
+            for (let j = 0; j < this.state.columns; j++) {
+                newCells[i][j].canPutFlags = canPutFlags;
+            }
+        }
+
+        newCells[row][column].isFlagged = true;
 
         this.setState({
-            cells: newCellsProps,
-            flagsCount: newCount
+            cells: newCells,
+            flagsCount: newFlagsCount
         });
     }
 
-    private handleCellOpened(hasMine: boolean, number: number) {
+    private handleCellOpened(hasMine: boolean, row: number, column: number) {
         if (!this.state.minesSpawned) {
             this.setState({ minesSpawned: true });
-            this.spawnMines(number);
+            this.spawnMines(row, column);
         }
 
         const newCells = [...this.state.cells];
-        newCells[number].isOpen = true;
+        newCells[row][column].isOpen = true;
 
         this.setState({ cells: newCells });
+
+        if (hasMine) {
+            // alert("Game over");
+        }
     }
 
     private getCellsFromProps(): JSX.Element[] {
-        return this.state.cells.map(prop => <Cell
-            isOpen={prop.isOpen}
-            minesNearby={prop.minesNearby}
-            number={prop.number}
-            canPutFlags={prop.canPutFlags}
-            cellFlagged={prop.cellFlagged}
-            cellOpened={prop.cellOpened}
-            hasMine={prop.hasMine}
-            key={prop.number}
-        ></Cell>);
+        const cells: JSX.Element[] = [];
+
+        for (let i = 0; i < this.state.rows; i++) {
+            for (let j = 0; j < this.state.columns; j++) {
+                cells.push(<Cell
+                    isOpen={this.state.cells[i][j].isOpen}
+                    minesNearby={this.state.cells[i][j].minesNearby}
+                    row={this.state.cells[i][j].row}
+                    column={this.state.cells[i][j].column}
+                    canPutFlags={this.state.cells[i][j].canPutFlags}
+                    cellFlagged={this.state.cells[i][j].cellFlagged}
+                    cellOpened={this.state.cells[i][j].cellOpened}
+                    isFlagged={this.state.cells[i][j].isFlagged}
+                    hasMine={this.state.cells[i][j].hasMine}
+                    key={`${i}-${j}`}
+                ></Cell>);
+            }
+        }
+
+        return cells;
     }
 
-    private spawnMines(cellNumber: number): void {
-        const columns = this.props.columns;
+    private spawnMines(clickedRow: number, clickedColumn: number): void {
+        const cellsNearbyClicked = this.cellsNearby(this.state.cells, clickedRow, clickedColumn);
+        cellsNearbyClicked.push(this.state.cells[clickedRow][clickedColumn]);
 
-        const cellsNearbyClicked = this.cellsNearby(cellNumber);
-        cellsNearbyClicked.push(cellNumber);
+        const minePositions: Array<[number, number]> = [];
 
-        let cellsWithMines: number[] = [];
+        while (minePositions.length !== this.state.minesCount) {
+            let row = Math.round(Math.random() * (this.state.rows - 1));
+            let column = Math.round(Math.random() * (this.state.columns - 1));
 
-        while (cellsWithMines.length != this.props.minesCount) {
-            let index = Math.round(Math.random() * (this.state.cells.length - 1));
-
-            if (cellsWithMines.indexOf(index) != -1 || cellsNearbyClicked.indexOf(index) != -1) {
+            if (minePositions.indexOf([row, column]) !== -1
+                || cellsNearbyClicked.filter(cell => cell.row === row && cell.column === column).length !== 0) {
                 continue;
             }
 
-            cellsWithMines.push(index);
+            minePositions.push([row, column]);
         }
 
         const newCellsProps = [...this.state.cells];
 
-        cellsWithMines.forEach(number => newCellsProps[number].hasMine = true);
-
-        for (let i = 0; i < newCellsProps.length; i++) {
-            let minesNearby = 0;
-
-            if (newCellsProps[i - 1]?.hasMine) minesNearby++;
-            if (newCellsProps[i - 1 - columns]?.hasMine) minesNearby++;
-            if (newCellsProps[i - columns]?.hasMine) minesNearby++;
-            if (newCellsProps[i + 1 - columns]?.hasMine) minesNearby++;
-            if (newCellsProps[i + 1]?.hasMine) minesNearby++;
-            if (newCellsProps[i + 1 + columns]?.hasMine) minesNearby++;
-            if (newCellsProps[i + columns]?.hasMine) minesNearby++;
-            if (newCellsProps[i - 1 + columns]?.hasMine) minesNearby++;
-
-            newCellsProps[i].minesNearby = minesNearby;
-            newCellsProps[i].isOpen = minesNearby === 0;
+        for (let minePosition of minePositions) {
+            newCellsProps[minePosition[0]][minePosition[1]].hasMine = true;
         }
+
+        for (let i = 0; i < this.state.rows; i++) {
+            for (let j = 0; j < this.state.columns; j++) {
+                newCellsProps[i][j].minesNearby = this.cellsNearby(newCellsProps, i, j).filter(cell => cell.hasMine).length;
+            }
+        }
+
+        const traversedCells: CellProps[] = [];
+        this.cellsForInitialOpen(newCellsProps, clickedRow, clickedColumn, traversedCells);
 
         this.setState({ cells: newCellsProps });
     }
 
-    private cellsNearby(cellNumber: number): number[] {
-        const columns = this.props.columns;
+    private cellsNearby(props: CellProps[][], i: number, j: number): CellProps[] {
+        const result: CellProps[] = [];
 
-        return [
-            cellNumber - 1,
-            cellNumber - 1 - columns,
-            cellNumber - columns,
-            cellNumber + 1 - columns,
-            cellNumber + 1,
-            cellNumber + 1 + columns,
-            cellNumber + columns,
-            cellNumber - 1 + columns
-        ];
+        result.push(props[i]?.[j - 1]);
+        result.push(props[i - 1]?.[j - 1]);
+        result.push(props[i - 1]?.[j]);
+        result.push(props[i - 1]?.[j + 1]);
+        result.push(props[i]?.[j + 1]);
+        result.push(props[i + 1]?.[j + 1]);
+        result.push(props[i + 1]?.[j]);
+        result.push(props[i + 1]?.[j - 1]);
+
+        return result.filter(r => r);
+    }
+
+    private cellsForInitialOpen(props: CellProps[][], i: number, j: number, traversed: CellProps[]): void {
+        const nearby = this.cellsNearby(props, i, j).filter(cell => !cell.hasMine && traversed.indexOf(cell) === -1);
+
+        nearby.forEach(cell => {
+            traversed.push(cell);
+            cell.isOpen = true;
+            if (cell.minesNearby === 0) {
+                this.cellsForInitialOpen(props, cell.row, cell.column, traversed);
+            }
+        });
+    }
+
+    private restart(rows: number, columns: number, mines: number): void {
+        this.setState({
+            cells: this.prepareNewCells(rows, columns),
+            minesSpawned: false,
+            rows: rows,
+            columns: columns,
+            flagsCount: mines,
+            minesCount: mines
+        });
+    }
+
+    private prepareNewCells(rows: number, columns: number): CellProps[][] {
+        const newCells: CellProps[][] = [];
+
+        for (let i = 0; i < rows; i++) {
+            newCells[i] = [];
+
+            for (let j = 0; j < columns; j++) {
+                newCells[i].push({
+                    isOpen: false,
+                    minesNearby: 0,
+                    row: i,
+                    column: j,
+                    hasMine: false,
+                    canPutFlags: true,
+                    isFlagged: false,
+                    cellFlagged: (isFlagged, row, column) => this.handleCellFlagged(isFlagged, row, column),
+                    cellOpened: (hasMine, row, column) => this.handleCellOpened(hasMine, row, column),
+                });
+            }
+        }
+
+        return newCells;
     }
 }
