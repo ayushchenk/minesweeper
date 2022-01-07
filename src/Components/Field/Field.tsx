@@ -97,7 +97,7 @@ export class Field extends React.Component<{}, FieldState>{
         this.setState({ cells: newCells });
 
         if (hasMine) {
-            // alert("Game over");
+            alert("Game over");
         }
     }
 
